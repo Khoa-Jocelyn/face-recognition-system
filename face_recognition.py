@@ -152,6 +152,9 @@ with tf.Graph().as_default():
                             right_eye = (key_points[1][0], key_points[6][0])
                             w = Distance_eyes(left_eye, right_eye)
                             W = 6.3 
+                            # d = 70
+                            # f = (w*d)/W
+                            # print(f)
                             f = 421
                             d = (W*f)/w #Distance_eyes from eyes to webcam
                             
