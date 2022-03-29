@@ -42,7 +42,7 @@ def responseSever(serverName, message):
     ws.close()
 
 def Distance_eyes(left_eye, right_eye):
-    w = math.sqrt( math.pow((right_eye[0] - left_eye[0]), 2) + math.pow((right_eye[1] - left_eye[1]), 2))
+    w = math.sqrt((right_eye[0] - left_eye[0])**2 + (right_eye[1] - left_eye[1])**2)
     return w
 
 def AccuracyStatistics(Nodes):
@@ -150,25 +150,36 @@ with tf.Graph().as_default():
                             #Distance_eyes from eyes to webcam
                             left_eye = (key_points[0][0], key_points[5][0])
                             right_eye = (key_points[1][0], key_points[6][0])
-                            w = Distance_eyes(left_eye, right_eye)
-                            W = 6.3 
-                            f = 421
-                            d = (W*f)/w #Distance_eyes from eyes to webcam
+                            w = int(Distance_eyes(left_eye, right_eye))
+                            W =  6.3
+
+                            x = [72, 62, 50, 45, 40, 35] #x is w
+                            y = [30, 40, 50, 60, 70, 80] #y is the distance from eyes to webcam
+                            coff = np.polyfit(x, y, 2) # y = Ax^2 + Bx + C
+                            # print(coff)
+                            A, B, C = coff
+                            d = A*w**2 + B*w + C
+                            # f = (w*dCM)/W
+                            # print(f)
+                            # print(w, wCM)
+
+                            # f = 421
+                            # d = (W*f)/w #Distance_eyes from eyes to webcam
                             
                             if best_class_probabilities > 0.80:
-                                if faceNum != temp:
-                                    temp = faceNum
-                                    link_list = []
-                                    for i in range(0, faceNum):
-                                        link_list.append([])
+                                # if faceNum != temp:
+                                #     temp = faceNum
+                                #     link_list = []
+                                #     for i in range(0, faceNum):
+                                #         link_list.append([])
                                 print(len(link_list), '\n')
                                 print('i: ', i)
-                                link_list[i].append(
+                                link_list.append(
                                     [HumanNames[best_class_indices[0]], best_class_probabilities])
-                                link_list[i] = link_list[i][-node_size:]
+                                link_list = link_list[-node_size:]
                                 print(link_list)
                                 result_names = ""
-                                if AccuracyStatistics(link_list[i]) >= (node_size*(80/100)):
+                                if AccuracyStatistics(link_list) >= (node_size*(80/100)):
                                     result_names = HumanNames[best_class_indices[0]]
                                 else:
                                     result_names = "Unknown"
@@ -186,7 +197,7 @@ with tf.Graph().as_default():
                     except Exception as e:
                         print("Error: ", e)
             else:
-                temp = 0
+                link_list.clear()
             endtimer = time.time()
             fps = 1 / (endtimer - timer)
             cv2.putText(frame, "Fps: {:.2f}".format(
