@@ -15,14 +15,14 @@ import threading
 import math
 
 video = 0
+npy = './npy'
 modeldir = './model/20180402-114759.pb'
 classifier_filename = './class/classifier.pkl'
-npy = './npy'
-train_img = "./train_img"
+train_img = "./aligned_img"
 serverName = "autodoor.herokuapp.com"
 link_list = []
 node_size = 10
-temp = 0
+result_names = ""
 
 
 def responseSever(serverName, message):
@@ -41,9 +41,11 @@ def responseSever(serverName, message):
 
     ws.close()
 
+
 def Distance_eyes(left_eye, right_eye):
-    w = math.sqrt((right_eye[0] - left_eye[0])**2 + (right_eye[1] - left_eye[1])**2)
+    w = math.sqrt((right_eye[0] - left_eye[0]) ** 2 + (right_eye[1] - left_eye[1]) ** 2)
     return w
+
 
 def AccuracyStatistics(Nodes):
     count = 0
@@ -102,8 +104,8 @@ with tf.Graph().as_default():
             ret, frame = video_capture.read()
             frame = cv2.flip(frame, 1)
             x, y, z = frame.shape
-            a = round(y/3)
-            bbox_img2 = cv2.rectangle(frame, (a, 0), (2*a, x), (0, 255, 0), 2)
+            a = round(y / 3)
+            bbox_img2 = cv2.rectangle(frame, (a, 0), (2 * a, x), (0, 255, 0), 2)
             timer = time.time()
             if frame.ndim == 2:
                 frame = facenet.to_rgb(frame)
@@ -128,8 +130,8 @@ with tf.Graph().as_default():
                         if xmin <= 0 or ymin <= 0 or xmax >= len(frame[0]) or ymax >= len(frame):
                             print('Face is very close!')
                             continue
-                        if xmin >= a and xmax <= a*2:
-                            cropped.append(frame[ymin:ymax, xmin:xmax, :])
+                        if xmin >= a and xmax <= a * 2:
+                            cropped.append(frame[ymin:ymax, xmin:xmax,:])
                             cropped[i] = facenet.flip(cropped[i], False)
                             scaled.append(np.array(Image.fromarray(
                                 cropped[i]).resize((image_size, image_size))))
@@ -140,38 +142,22 @@ with tf.Graph().as_default():
                                 scaled[i].reshape(-1, input_image_size, input_image_size, 3))
                             feed_dict = {
                                 images_placeholder: scaled_reshape[i], phase_train_placeholder: False}
-                            emb_array[0, :] = sess.run(
+                            emb_array[0,:] = sess.run(
                                 embeddings, feed_dict=feed_dict)
                             predictions = model.predict_proba(emb_array)
                             best_class_indices = np.argmax(predictions, axis=1)
                             best_class_probabilities = predictions[np.arange(
                                 len(best_class_indices)), best_class_indices]
                             fancy_draw(frame, bbox)
-                            #Distance_eyes from eyes to webcam
                             left_eye = (key_points[0][0], key_points[5][0])
                             right_eye = (key_points[1][0], key_points[6][0])
                             w = int(Distance_eyes(left_eye, right_eye))
-                            W =  6.3
-
-                            x = [72, 62, 50, 45, 40, 35] #x is w
-                            y = [30, 40, 50, 60, 70, 80] #y is the distance from eyes to webcam
-                            coff = np.polyfit(x, y, 2) # y = Ax^2 + Bx + C
-                            # print(coff)
-                            A, B, C = coff
-                            d = A*w**2 + B*w + C
-                            # f = (w*dCM)/W
-                            # print(f)
-                            # print(w, wCM)
-
-                            # f = 421
-                            # d = (W*f)/w #Distance_eyes from eyes to webcam
-                            
+                            W = 6.3
+                            x = [72, 62, 50, 45, 40, 35]  # x is w
+                            y = [30, 40, 50, 60, 70, 80]  # y is the distance from eyes to webcam
+                            A, B, C = np.polyfit(x, y, 2)  # y = Ax^2 + Bx + C
+                            d = A * w ** 2 + B * w + C
                             if best_class_probabilities > 0.80:
-                                # if faceNum != temp:
-                                #     temp = faceNum
-                                #     link_list = []
-                                #     for i in range(0, faceNum):
-                                #         link_list.append([])
                                 print(len(link_list), '\n')
                                 print('i: ', i)
                                 link_list.append(
@@ -179,18 +165,15 @@ with tf.Graph().as_default():
                                 link_list = link_list[-node_size:]
                                 print(link_list)
                                 result_names = ""
-                                if AccuracyStatistics(link_list) >= (node_size*(80/100)):
+                                if AccuracyStatistics(link_list) >= (node_size * (80 / 100)):
                                     result_names = HumanNames[best_class_indices[0]]
                                 else:
                                     result_names = "Unknown"
-                                cv2.rectangle(frame, (xmin, ymin - 30),
-                                              (xmax, ymin - 10), (0, 255, 0), -1)
-                                cv2.putText(frame, result_names + f' {int(d)}cm', (xmin, ymin - 12), cv2.FONT_HERSHEY_COMPLEX_SMALL,
-                                            1, (0, 0, 0), thickness=1, lineType=1)
                             else:
-                                cv2.rectangle(frame, (xmin, ymin - 30),
+                                result_names = "Unknown"
+                            cv2.rectangle(frame, (xmin, ymin - 30),
                                               (xmax, ymin - 10), (0, 255, 0), -1)
-                                cv2.putText(frame, "Unknown", (xmin, ymin - 12), cv2.FONT_HERSHEY_COMPLEX_SMALL,
+                            cv2.putText(frame, result_names + f'-{int(d)}cm', (xmin, ymin - 12), cv2.FONT_HERSHEY_COMPLEX_SMALL,
                                             1, (0, 0, 0), thickness=1, lineType=1)
                         else:
                             fancy_draw(frame, bbox)
