@@ -3,7 +3,8 @@ import time
 import os
 import detect_face
 import tensorflow.compat.v1 as tf
-from sys import exit
+
+
 def main():
     lable = "DinhVanKhoa"
     npy = './npy'
@@ -25,12 +26,11 @@ def main():
                 h_frame, w_frame, _ = frame.shape
                 frame = cv2.flip(frame, 1)
                 copy_frame = frame
-                y = round(h_frame/5)
-                min_vector = (0, y*tmp)
-                max_vector = (w_frame, y*(tmp+1))
+                y = round(h_frame / 5)
+                min_vector = (0, y * tmp)
+                max_vector = (w_frame, y * (tmp + 1))
                 timer = time.time()
-                bounding_boxes, key_points = detect_face.detect_face(
-                    frame, minsize, pnet, rnet, onet, threshold, factor)
+                bounding_boxes, key_points = detect_face.detect_face(frame, minsize, pnet, rnet, onet, threshold, factor)
                 faceNum = bounding_boxes.shape[0]
                 key = cv2.waitKey(1)
                 if faceNum > 0:
@@ -47,7 +47,7 @@ def main():
                             if xmin <= 0 or ymin <= 0 or xmax >= len(frame[0]) or ymax >= len(frame):
                                 print('Face is very close!')
                                 continue
-                            if left_eye[1] >= (y*tmp) and right_eye[1] >= (y*tmp) and left_eye[1] <= (y*(tmp+1)) and right_eye[1] <= (y*(tmp+1)) :
+                            if left_eye[1] >= (y * tmp) and right_eye[1] >= (y * tmp) and left_eye[1] <= (y * (tmp + 1)) and right_eye[1] <= (y * (tmp + 1)):
                                 if not os.path.exists('train_img/' + str(lable)):
                                     os.mkdir('train_img/' + str(lable))
                                 else:
@@ -75,8 +75,6 @@ def main():
                     break
             video_capture.release()
             cv2.destroyAllWindows()
-
-        
 
 
 if __name__ == "__main__":

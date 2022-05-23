@@ -32,7 +32,7 @@ class training:
                 embedding_size = embeddings.get_shape()[1]
 
                 print('Extracting features of images for model')
-                batch_size = 256
+                batch_size = 512
                 image_size = 160  
                 nrof_images = len(path)
                 nrof_batches_per_epoch = int(math.ceil(1.0 * nrof_images / batch_size))
@@ -57,4 +57,9 @@ class training:
                 # Saving model
                 with open(classifier_file_name, 'wb') as outfile:
                     pickle.dump((model, class_names), outfile)
-                return classifier_file_name
+                    
+                from sklearn.metrics import confusion_matrix
+                label_pred = model.predict(emb_array)
+                conf_matrix = confusion_matrix(label, label_pred)
+                print(conf_matrix)
+
