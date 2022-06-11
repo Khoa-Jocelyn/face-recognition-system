@@ -46,9 +46,7 @@ class training:
                     emb_array[start_index:end_index, :] = sess.run(embeddings, feed_dict=feed_dict)
 
                 classifier_file_name = os.path.expanduser(self.classifier_filename)
-
                 # Training Started
-                print('Training Started')
                 model = SVC(kernel='linear', probability=True)
                 model.fit(emb_array, label)
 
@@ -62,4 +60,5 @@ class training:
                 label_pred = model.predict(emb_array)
                 conf_matrix = confusion_matrix(label, label_pred)
                 print(conf_matrix)
-
+                
+                return classifier_file_name

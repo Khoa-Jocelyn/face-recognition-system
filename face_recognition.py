@@ -14,19 +14,19 @@ from websocket import create_connection
 import threading
 import math
 import mediapipe as mp
-import json
 import random
 
-video = -2
+video = 0
 npy = './npy'
 modeldir = './model/20180402-114759.pb'
 face_classifier_filename = './class/classifier.pkl'
-train_img = "./aligned_img"
-serverName = "ahkiot.herokuapp.com"
+train_img = './aligned_img'
+serverName = 'ahkiot.herokuapp.com'
 link_list = []
 node_size = 10
-result_names = ""
-action_face_classifier_filename = "face_anti_spoofing/class/"
+result_names = ''
+server_message = ''
+action_face_classifier_filename = 'face_anti_spoofing/class/'
 mpDraw = mp.solutions.drawing_utils
 mpFaceMesh = mp.solutions.face_mesh
 faceMesh = mpFaceMesh.FaceMesh(static_image_mode=True, max_num_faces=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
@@ -56,14 +56,14 @@ def extract_landmarks(image, results, draw_lms=False):
     if results.multi_face_landmarks:
         for lms in results.multi_face_landmarks:
             c_lm = []
-            for id, lm in enumerate(lms.landmark): 
+            for id, lm in enumerate(lms.landmark):
                 if id in lms_id:
                     c_lm.append(lm.x)
-                    # print("lm.x: ", lm.x)
+                    # print('lm.x: ', lm.x)
                     c_lm.append(lm.y)
-                    # print("lm.y: ", lm.y)
+                    # print('lm.y: ', lm.y)
                     c_lm.append(lm.z)
-                    # print("lm.z: ",lm.z)
+                    # print('lm.z: ',lm.z)
             if draw_lms:
                 mpDraw.draw_landmarks(image,
                           lms,
@@ -74,7 +74,7 @@ def extract_landmarks(image, results, draw_lms=False):
 
 
 def draw_class_on_image(label, image, *args):
-    cv2.putText(image, label, *args, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 1)
+    cv2.putText(image, label, *args, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
     return image
 
 
@@ -87,27 +87,38 @@ def predict(image, model):
             c_lm = np.array(c_lm).reshape(1, -1)
             result_class = model.predict(c_lm)
             accuracy = model.score(c_lm, result_class)
-            # print(json.dumps({"Class": class_name[0], "Accuracy": "%.2f" % (accuracy)}, indent=4), "\n")
-            if result_class != ["Normal"]:
-                image = draw_class_on_image(("%s - %.2f" % (result_class, accuracy * 100) + "%"), image, (10, 80))
+            # print(json.dumps({'Class': class_name[0], 'Accuracy': '%.2f' % (accuracy)}, indent=4), '\n')
+            if result_class != ['Normal']:
+                image = draw_class_on_image(('%s - %.2f' % (result_class, accuracy * 100) + '%'), image, (10, 80))
     return image, result_class
 
 
 def response_sever(serverName, message):
-    """ Connect to server """
-    ws = create_connection("ws://" + str(serverName))
-
-    """ Send data to the server """
-    print("Sending...")
-    ws.send(message)
-    print("Sent")
-
-    """ Receive message from server """
-    # print("Receiving...")
-    # result = ws.recv()
-    # print("Received '%s'" % result)
+    global confirm
+    ''' Connect to server '''
+    ws = create_connection('ws://' + str(serverName), timeout=8)
+    if ws:
+        ''' Send data to the server '''
+        print('Sending...')
+        ws.send(message)
+        print('Sent')
+    
+        ''' Receive message from server '''
+        print('Receiving...')
+        try:
+            while ws.recv().decode('utf-8'):
+                print(ws.recv().decode('utf-8'))
+                if ws.recv().decode('utf-8') == 'close successfully':
+                    mode['Recognition'] = True
+                    mode['Anti-Spoofing'] = False
+                    ws.close()
+                    break
+        except:
+            print('Warning: Server disconected!')
+            mode['Recognition'] = True
+            mode['Anti-Spoofing'] = False
     ws.close()
-
+        
 
 def distance_eyes(left_eye, right_eye):
     w = math.sqrt((right_eye[0] - left_eye[0]) ** 2 + (right_eye[1] - left_eye[1]) ** 2)
@@ -153,11 +164,16 @@ def keypoint_draw(image, key_points):
 
 start_time = 0
 end_time = 0
-confirm = 0
-mode = {"Recognition": True, "Anti-Spoofing": False}
-classdir = "face_anti_spoofing/class/"
+confirm_str = ""
+message = ''
+counter = 0
+challenge_request_result = set()
+face_id = set()
+mode = {'Recognition': True, 'Anti-Spoofing': False}
+classdir = 'face_anti_spoofing/class/'
 action_classifier_model, responce_class_names = load_model(classdir)
-challenge_request = ""
+responce_class_names.pop()
+challenge_request = ''
 with tf.Graph().as_default():
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.6)
     sess = tf.Session(config=tf.ConfigProto(
@@ -165,18 +181,18 @@ with tf.Graph().as_default():
     with sess.as_default():
         pnet, rnet, onet = detect_face.create_mtcnn(sess, npy)
         minsize = 30
-        threshold = [0.7, 0.8, 0.8]
+        threshold = [0.7, 0.7, 0.7]
         factor = 0.709
         margin = 44
         image_size = 160
         input_image_size = 160
-        HumanNames = os.listdir(train_img)
-        HumanNames.sort()
+        human_names = os.listdir(train_img)
+        human_names.sort()
         print('Loading Model')
         facenet.load_model(modeldir)
-        images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
-        embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
-        phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+        images_placeholder = tf.get_default_graph().get_tensor_by_name('input:0')
+        embeddings = tf.get_default_graph().get_tensor_by_name('embeddings:0')
+        phase_train_placeholder = tf.get_default_graph().get_tensor_by_name('phase_train:0')
         embedding_size = embeddings.get_shape()[1]
         face_classifier_filename_exp = os.path.expanduser(face_classifier_filename)
         with open(face_classifier_filename_exp, 'rb') as infile:
@@ -189,22 +205,43 @@ with tf.Graph().as_default():
             x, y, z = frame.shape
             a = round(y / 4)
             b = round(x / 5)
+            cv2.rectangle(frame, (0, 0), (y, b), (0, 255, 0), -1)
             fps_start_time = time.time()
-            if mode["Anti-Spoofing"] == True:
-                frame, challenge_responce = predict(frame, action_classifier_model)
-                end_time = time.time()
-                time_counter = end_time - start_time
-                if challenge_request == challenge_responce and time_counter <= 3:
-                    confirm += 1
-                    print(confirm)
-                    mode["Recognition"] = True
-                    mode["Anti-Spoofing"] = False
-                if time_counter > 3:
-                    confirm = 0 
-                    mode["Recognition"] = True
-                    mode["Anti-Spoofing"] = False
-                frame = draw_class_on_image(("%s - %.2f" % (challenge_request, 3 - time_counter)), frame, (10, 55))
-            if mode["Recognition"] == True:
+            if mode['Anti-Spoofing'] == True:
+                if counter <= 3:
+                    message = ''
+                    frame, challenge_responce = predict(frame, action_classifier_model)
+                    end_time = time.time()
+                    time_counter = end_time - start_time
+                    confirm_str = "FACE_RECOGNITION_CONFIRM-" + result_names
+                    if time_counter < 2:
+                        if challenge_request == challenge_responce and challenge_responce not in ['', 'Normal']:
+                            challenge_request_result.add(True)
+                            mode['Recognition'] = True
+                            mode['Anti-Spoofing'] = False
+                            counter += 1
+                    if time_counter > 2:
+                        challenge_request_result.add(False)
+                        mode['Recognition'] = True
+                        mode['Anti-Spoofing'] = False
+                        counter += 1
+                if counter == 3:
+                    if len(face_id) == 1 and len(challenge_request_result) == 1 and (True in challenge_request_result):
+                        Thr_1 = threading.Thread(target=response_sever, args=(serverName, confirm_str))
+                        Thr_1.start()
+                        mode['Recognition'] = False
+                        mode['Anti-Spoofing'] = False
+                        message = 'Real'
+                    else:
+                        message = 'Fake'
+                        mode['Recognition'] = True
+                        mode['Anti-Spoofing'] = False
+                    face_id.clear()
+                    challenge_request_result.clear()
+                    counter = 0
+                print(face_id, challenge_request_result, message, counter)
+                frame = draw_class_on_image(('%s - %.2f' % (challenge_request, 3 - time_counter)), frame, (10, 55))
+            if mode['Recognition'] == True:
                 if frame.ndim == 2:
                     frame = facenet.to_rgb(frame)
                 bounding_boxes, key_points = detect_face.detect_face(
@@ -229,6 +266,7 @@ with tf.Graph().as_default():
                                 print('Face is very close!')
                                 continue
                             if xmin >= a and xmax <= a * 3 and ymin >= b and ymax <= b * 4:
+                                server_message = ''
                                 cropped.append(frame[ymin:ymax, xmin:xmax,:])
                                 cropped[i] = facenet.flip(cropped[i], False)
                                 scaled.append(np.array(Image.fromarray(
@@ -256,20 +294,21 @@ with tf.Graph().as_default():
                                 A, B, C = np.polyfit(x, y, 2)  # y = Ax^2 + Bx + C
                                 d = A * w ** 2 + B * w + C
                                 if best_class_probabilities > 0.80:
-                                    link_list.append([HumanNames[best_class_indices[0]], best_class_probabilities])
+                                    link_list.append([human_names[best_class_indices[0]], best_class_probabilities])
                                     link_list = link_list[-node_size:]
                                     if accuracy_statistics(link_list) >= (node_size * (80 / 100)):
-                                        result_names = list(dict(link_list).keys())[0]
-                                        if 30 <= d <= 35: 
-                                            mode["Anti-Spoofing"] = True
-                                            mode["Recognition"] = False
+                                        result_names = human_names[best_class_indices[0]]
+                                        face_id.add(human_names[best_class_indices[0]])
+                                        if 25 <= d <= 35: 
+                                            mode['Anti-Spoofing'] = True
+                                            mode['Recognition'] = False
                                             start_time = time.time()
                                             challenge_request = random.choice(responce_class_names)
                                             link_list = []
                                     else:
-                                        result_names = "Unknown"
+                                        result_names = 'Unknown'
                                 else:
-                                    result_names = "Unknown"
+                                    result_names = 'Unknown'
                                 cv2.rectangle(frame, (xmin, ymin - 30),
                                                   (xmax, ymin - 10), (0, 255, 0), -1)
                                 cv2.putText(frame, result_names + ' %.2f cm' % (d) , (xmin, ymin - 12), cv2.FONT_HERSHEY_COMPLEX_SMALL,
@@ -277,16 +316,13 @@ with tf.Graph().as_default():
                             else:
                                 fancy_draw(frame, bbox)
                         except Exception as e:
-                            print("Error: ", e)
+                            print('Error: ', e)
                 else:
                     link_list.clear()
-            if confirm == 3:
-                Thr_1 = threading.Thread(target=response_sever, args=(serverName, result_names))
-                Thr_1.start()
-                confirm = 0
             fps_end_time = time.time()
             fps = 1 / (fps_end_time - fps_start_time)
-            frame = draw_class_on_image("Fps: %d" % (fps), frame, (10, 30))
+            frame = draw_class_on_image('%s' % (message), frame, (560, 30))
+            frame = draw_class_on_image('Fps: %d' % (fps), frame, (10, 30))
             cv2.rectangle(frame, (a, b), (3 * a, 4 * b), (0, 255, 0), 2)
             cv2.imshow('Face Recognition', frame)
             key = cv2.waitKey(1)
